@@ -1,45 +1,8 @@
-# Core Dependencies
-streamlit>=1.32.0
-playwright>=1.42.0
-PyGithub>=2.1.1
-python-dotenv>=1.0.1
-requests>=2.31.0
-
-# AI and ML
-openai>=1.12.0
-langchain>=0.1.12
-transformers>=4.38.2
-torch>=2.2.1
-
-# Testing and Development
-pytest>=8.0.2
-pytest-asyncio>=0.23.5
-pytest-cov>=4.1.0
-black>=24.2.0
-flake8>=7.0.0
-mypy>=1.8.0
-
-# Utilities
-python-dateutil>=2.8.2
-pytz>=2024.1
-tqdm>=4.66.2
-colorama>=0.4.6
-rich>=13.7.0
-
-# Security
-cryptography>=42.0.5
-python-jose>=3.3.0
-passlib>=1.7.4
-bcrypt>=4.1.2
-
-# Documentation
-mkdocs>=1.5.3
-mkdocs-material>=9.5.3
-
-# System dependencies
 python3-dev
-python3-pip
-python3-venv
 build-essential
 libssl-dev
-libffi-dev 
+libffi-dev
+libpq-dev
+git
+wget
+curl 
