@@ -43,4 +43,8 @@ bcrypt==4.1.2
 
 # Documentation
 mkdocs==1.5.3
-mkdocs-material==9.5.3 
+mkdocs-material==9.5.3
+
+# Added from the code block
+pydantic==2.4.2
+pydantic-settings==2.0.3 

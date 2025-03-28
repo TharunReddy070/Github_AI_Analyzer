@@ -2,6 +2,10 @@
 Core modules for GitHub AI Analyzer
 """
 
-# Make key core classes available at the package level
-from .model_manager import ModelManager
-from .config import *
+# Try to import from regular config, fall back to simplified version
+try:
+    from .model_manager import ModelManager
+    from .config import settings
+except ImportError:
+    from .model_manager import ModelManager
+    from .config_simple import *

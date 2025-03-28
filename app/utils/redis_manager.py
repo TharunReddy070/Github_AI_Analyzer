@@ -16,7 +16,8 @@ class RedisManager:
             "analysis_results": {},
             "code_analysis": {},
             "web_tests": {},
-            "user_preferences": {}
+            "user_preferences": {},
+            "agent_messages": {}
         }
         
         # Try to connect to Redis
@@ -67,7 +68,8 @@ class RedisManager:
     def store_analysis_result(self, repo_url, results):
         """Store GitHub repository analysis results"""
         key = f"github_analysis:{repo_url}"
-        success = self._store_in_redis(key, results)
+        results['timestamp'] = datetime.now().isoformat()
+        success = self._store_in_redis(key, results, expires=3600)
         if not success:
             self.memory_cache["analysis_results"][repo_url] = results
         return True
@@ -84,7 +86,8 @@ class RedisManager:
     def store_code_analysis(self, code_id, results):
         """Store code analysis results"""
         key = f"code_analysis:{code_id}"
-        success = self._store_in_redis(key, results)
+        results['timestamp'] = datetime.now().isoformat()
+        success = self._store_in_redis(key, results, expires=3600)
         if not success:
             self.memory_cache["code_analysis"][code_id] = results
         return True
@@ -101,7 +104,8 @@ class RedisManager:
     def store_web_test_result(self, url, results):
         """Store web test results"""
         key = f"web_test:{url}"
-        success = self._store_in_redis(key, results)
+        results['timestamp'] = datetime.now().isoformat()
+        success = self._store_in_redis(key, results, expires=3600)
         if not success:
             self.memory_cache["web_tests"][url] = results
         return True
@@ -118,7 +122,8 @@ class RedisManager:
     def store_user_preferences(self, user_id, preferences):
         """Store user preferences"""
         key = f"user_prefs:{user_id}"
-        success = self._store_in_redis(key, preferences)
+        preferences['timestamp'] = datetime.now().isoformat()
+        success = self._store_in_redis(key, preferences, expires=86400)
         if not success:
             self.memory_cache["user_preferences"][user_id] = preferences
         return True
@@ -130,67 +135,30 @@ class RedisManager:
         if result is None and user_id in self.memory_cache["user_preferences"]:
             return self.memory_cache["user_preferences"][user_id]
         return result
-
-    def store_agent_message(self, agent_id: str, message: dict) -> bool:
-        """Store agent message."""
-        try:
-            key = f"agent:{agent_id}:messages"
-            message['timestamp'] = datetime.now().isoformat()
-            self.redis.rpush(key, json.dumps(message))
-            return True
-        except Exception as e:
-            logger.error(f"Failed to store agent message: {str(e)}")
-            return False
-
-    def get_agent_messages(self, agent_id: str) -> list:
-        """Retrieve agent messages."""
-        try:
-            key = f"agent:{agent_id}:messages"
-            messages = self.redis.lrange(key, 0, -1)
-            return [json.loads(msg) for msg in messages]
-        except Exception as e:
-            logger.error(f"Failed to get agent messages: {str(e)}")
-            return []
-
-    def clear_agent_messages(self, agent_id: str) -> bool:
-        """Clear agent messages."""
-        try:
-            key = f"agent:{agent_id}:messages"
-            self.redis.delete(key)
-            return True
-        except Exception as e:
-            logger.error(f"Failed to clear agent messages: {str(e)}")
-            return False
-
-    def store_task_status(self, task_id: str, status: dict) -> bool:
-        """Store task status."""
-        try:
-            key = f"task:{task_id}:status"
-            status['timestamp'] = datetime.now().isoformat()
-            self.redis.setex(
-                key,
-                7200,  # 2 hours expiry
-                json.dumps(status)
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to store task status: {str(e)}")
-            return False
-
-    def get_task_status(self, task_id: str) -> dict:
-        """Retrieve task status."""
-        try:
-            key = f"task:{task_id}:status"
-            status = self.redis.get(key)
-            return json.loads(status) if status else None
-        except Exception as e:
-            logger.error(f"Failed to get task status: {str(e)}")
-            return None
-
+    
+    # Agent Messages
+    def store_agent_message(self, agent_id, message):
+        """Store agent message"""
+        key = f"agent_message:{agent_id}"
+        message['timestamp'] = datetime.now().isoformat()
+        success = self._store_in_redis(key, message, expires=3600)
+        if not success:
+            self.memory_cache["agent_messages"][agent_id] = message
+        return True
+    
+    def get_agent_message(self, agent_id):
+        """Get agent message"""
+        key = f"agent_message:{agent_id}"
+        result = self._get_from_redis(key)
+        if result is None and agent_id in self.memory_cache["agent_messages"]:
+            return self.memory_cache["agent_messages"][agent_id]
+        return result
+    
     def close(self):
         """Close Redis connection."""
-        try:
-            self.redis.close()
-            logger.info("Redis connection closed")
-        except Exception as e:
-            logger.error(f"Failed to close Redis connection: {str(e)}") 
+        if hasattr(self, 'redis') and self.redis_available:
+            try:
+                self.redis.close()
+                logger.info("Redis connection closed")
+            except Exception as e:
+                logger.error(f"Error closing Redis connection: {e}") 

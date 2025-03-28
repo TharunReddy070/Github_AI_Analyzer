@@ -16,6 +16,8 @@ setup(
         "webdriver-manager==4.0.0",
         "requests==2.31.0",
         "python-dateutil==2.8.2",
+        "pydantic==2.4.2",
+        "pydantic-settings==2.0.3",
     ],
     entry_points={
         "console_scripts": [
