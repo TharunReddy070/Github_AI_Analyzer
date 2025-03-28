@@ -1,54 +1,135 @@
-from redis import Redis
-from app.core.config import settings
+import redis
 import json
+import os
 import logging
-from datetime import datetime
 import streamlit as st
+from datetime import datetime
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class RedisManager:
     def __init__(self):
-        """Initialize Redis connection."""
+        # Initialize in-memory fallback storage
+        self.memory_cache = {
+            "analysis_results": {},
+            "code_analysis": {},
+            "web_tests": {},
+            "user_preferences": {}
+        }
+        
+        # Try to connect to Redis
         try:
-            self.redis = Redis(
-                host=settings.REDIS_HOST,
-                port=settings.REDIS_PORT,
-                db=settings.REDIS_DB,
+            self.redis = redis.Redis(
+                host=os.getenv("REDIS_HOST", "localhost"),
+                port=int(os.getenv("REDIS_PORT", 6379)),
+                db=int(os.getenv("REDIS_DB", 0)),
+                password=os.getenv("REDIS_PASSWORD", None),
+                socket_timeout=5,
                 decode_responses=True
             )
-            self.redis.ping()  # Test connection
-            logger.info("Redis connection established successfully")
+            # Test connection
+            self.redis.ping()
+            self.redis_available = True
+            logger.info("Connected to Redis successfully")
             st.success("Redis connected successfully!")
-        except Exception as e:
-            logger.error(f"Failed to connect to Redis: {str(e)}")
-            st.error(f"Redis connection failed: {str(e)}")
-            raise
-
-    def store_analysis_result(self, repo_url: str, result: dict) -> bool:
-        """Store repository analysis result."""
-        try:
-            key = f"analysis:{repo_url}"
-            result['timestamp'] = datetime.now().isoformat()
-            self.redis.setex(
-                key,
-                3600,  # 1 hour expiry
-                json.dumps(result)
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to store analysis result: {str(e)}")
-            return False
-
-    def get_analysis_result(self, repo_url: str) -> dict:
-        """Retrieve repository analysis result."""
-        try:
-            key = f"analysis:{repo_url}"
-            result = self.redis.get(key)
-            return json.loads(result) if result else None
-        except Exception as e:
-            logger.error(f"Failed to get analysis result: {str(e)}")
-            return None
+        except (redis.ConnectionError, redis.exceptions.TimeoutError) as e:
+            self.redis_available = False
+            logger.warning(f"Redis connection failed: {e}. Using in-memory fallback.")
+            st.warning(f"Redis connection failed: {e}. Using in-memory fallback.")
+    
+    def _store_in_redis(self, key, value, expires=None):
+        """Store data in Redis with optional expiration"""
+        if self.redis_available:
+            try:
+                self.redis.set(key, json.dumps(value))
+                if expires:
+                    self.redis.expire(key, expires)
+                return True
+            except Exception as e:
+                logger.error(f"Error storing in Redis: {e}")
+                return False
+        return False
+    
+    def _get_from_redis(self, key):
+        """Get data from Redis"""
+        if self.redis_available:
+            try:
+                data = self.redis.get(key)
+                if data:
+                    return json.loads(data)
+            except Exception as e:
+                logger.error(f"Error retrieving from Redis: {e}")
+        return None
+    
+    # GitHub Analysis Results
+    def store_analysis_result(self, repo_url, results):
+        """Store GitHub repository analysis results"""
+        key = f"github_analysis:{repo_url}"
+        success = self._store_in_redis(key, results)
+        if not success:
+            self.memory_cache["analysis_results"][repo_url] = results
+        return True
+    
+    def get_analysis_result(self, repo_url):
+        """Get GitHub repository analysis results"""
+        key = f"github_analysis:{repo_url}"
+        result = self._get_from_redis(key)
+        if result is None and repo_url in self.memory_cache["analysis_results"]:
+            return self.memory_cache["analysis_results"][repo_url]
+        return result
+    
+    # Code Analysis Results
+    def store_code_analysis(self, code_id, results):
+        """Store code analysis results"""
+        key = f"code_analysis:{code_id}"
+        success = self._store_in_redis(key, results)
+        if not success:
+            self.memory_cache["code_analysis"][code_id] = results
+        return True
+    
+    def get_code_analysis(self, code_id):
+        """Get code analysis results"""
+        key = f"code_analysis:{code_id}"
+        result = self._get_from_redis(key)
+        if result is None and code_id in self.memory_cache["code_analysis"]:
+            return self.memory_cache["code_analysis"][code_id]
+        return result
+    
+    # Web Test Results
+    def store_web_test_result(self, url, results):
+        """Store web test results"""
+        key = f"web_test:{url}"
+        success = self._store_in_redis(key, results)
+        if not success:
+            self.memory_cache["web_tests"][url] = results
+        return True
+    
+    def get_web_test_result(self, url):
+        """Get web test results"""
+        key = f"web_test:{url}"
+        result = self._get_from_redis(key)
+        if result is None and url in self.memory_cache["web_tests"]:
+            return self.memory_cache["web_tests"][url]
+        return result
+    
+    # User Preferences
+    def store_user_preferences(self, user_id, preferences):
+        """Store user preferences"""
+        key = f"user_prefs:{user_id}"
+        success = self._store_in_redis(key, preferences)
+        if not success:
+            self.memory_cache["user_preferences"][user_id] = preferences
+        return True
+    
+    def get_user_preferences(self, user_id):
+        """Get user preferences"""
+        key = f"user_prefs:{user_id}"
+        result = self._get_from_redis(key)
+        if result is None and user_id in self.memory_cache["user_preferences"]:
+            return self.memory_cache["user_preferences"][user_id]
+        return result
 
     def store_agent_message(self, agent_id: str, message: dict) -> bool:
         """Store agent message."""
@@ -104,80 +185,6 @@ class RedisManager:
             return json.loads(status) if status else None
         except Exception as e:
             logger.error(f"Failed to get task status: {str(e)}")
-            return None
-
-    def store_code_analysis(self, code_id: str, analysis: dict) -> bool:
-        """Store code analysis results."""
-        try:
-            key = f"code_analysis:{code_id}"
-            analysis['timestamp'] = datetime.now().isoformat()
-            self.redis.setex(
-                key,
-                3600,  # 1 hour expiry
-                json.dumps(analysis)
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to store code analysis: {str(e)}")
-            return False
-
-    def get_code_analysis(self, code_id: str) -> dict:
-        """Retrieve code analysis results."""
-        try:
-            key = f"code_analysis:{code_id}"
-            analysis = self.redis.get(key)
-            return json.loads(analysis) if analysis else None
-        except Exception as e:
-            logger.error(f"Failed to get code analysis: {str(e)}")
-            return None
-
-    def store_web_test_result(self, url: str, result: dict) -> bool:
-        """Store web test results."""
-        try:
-            key = f"web_test:{url}"
-            result['timestamp'] = datetime.now().isoformat()
-            self.redis.setex(
-                key,
-                3600,  # 1 hour expiry
-                json.dumps(result)
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to store web test result: {str(e)}")
-            return False
-
-    def get_web_test_result(self, url: str) -> dict:
-        """Retrieve web test results."""
-        try:
-            key = f"web_test:{url}"
-            result = self.redis.get(key)
-            return json.loads(result) if result else None
-        except Exception as e:
-            logger.error(f"Failed to get web test result: {str(e)}")
-            return None
-
-    def store_user_preferences(self, user_id: str, preferences: dict) -> bool:
-        """Store user preferences."""
-        try:
-            key = f"user_prefs:{user_id}"
-            self.redis.setex(
-                key,
-                86400,  # 24 hours expiry
-                json.dumps(preferences)
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to store user preferences: {str(e)}")
-            return False
-
-    def get_user_preferences(self, user_id: str) -> dict:
-        """Retrieve user preferences."""
-        try:
-            key = f"user_prefs:{user_id}"
-            prefs = self.redis.get(key)
-            return json.loads(prefs) if prefs else None
-        except Exception as e:
-            logger.error(f"Failed to get user preferences: {str(e)}")
             return None
 
     def close(self):
