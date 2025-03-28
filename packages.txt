@@ -34,4 +34,12 @@ bcrypt>=4.1.2
 
 # Documentation
 mkdocs>=1.5.3
-mkdocs-material>=9.5.3 
+mkdocs-material>=9.5.3
+
+# System dependencies
+python3-dev
+python3-pip
+python3-venv
+build-essential
+libssl-dev
+libffi-dev 
